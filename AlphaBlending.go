@@ -7,9 +7,7 @@ type IAlphaBlending interface {
 	SetPortProperties(relativeX float64, relativeY float64, zOrder int, relativeWidth float64, relativeHeight float64, port HubPort) error
 }
 
-// A `Hub` that mixes the :rom:attr:`MediaType.AUDIO` stream of its connected
-// sources and constructs one output with :rom:attr:`MediaType.VIDEO`
-// streams of its connected sources into its sink
+// A `Hub` that mixes the :rom:attr:`MediaType.AUDIO` stream of its connected sources and constructs one output with :rom:attr:`MediaType.VIDEO` streams of its connected sources into its sink
 type AlphaBlending struct {
 	Hub
 }
@@ -38,17 +36,24 @@ func (elem *AlphaBlending) SetMaster(source HubPort, zOrder int) error {
 	setIfNotEmpty(params, "source", source)
 	setIfNotEmpty(params, "zOrder", zOrder)
 
-	req["params"] = map[string]interface{}{
+	reqparams := map[string]interface{}{
 		"operation":       "setMaster",
 		"object":          elem.Id,
 		"operationParams": params,
 	}
+	if elem.connection.SessionId != "" {
+		reqparams["sessionId"] = elem.connection.SessionId
+	}
+	req["params"] = reqparams
 
 	// Call server and wait response
 	response := <-elem.connection.Request(req)
 
 	// Returns error or nil
-	return response.Error
+	if response.Error != nil {
+		return fmt.Errorf("[%d] %s %s", response.Error.Code, response.Error.Message, response.Error.Data)
+	}
+	return nil
 
 }
 
@@ -65,16 +70,23 @@ func (elem *AlphaBlending) SetPortProperties(relativeX float64, relativeY float6
 	setIfNotEmpty(params, "relativeHeight", relativeHeight)
 	setIfNotEmpty(params, "port", port)
 
-	req["params"] = map[string]interface{}{
+	reqparams := map[string]interface{}{
 		"operation":       "setPortProperties",
 		"object":          elem.Id,
 		"operationParams": params,
 	}
+	if elem.connection.SessionId != "" {
+		reqparams["sessionId"] = elem.connection.SessionId
+	}
+	req["params"] = reqparams
 
 	// Call server and wait response
 	response := <-elem.connection.Request(req)
 
 	// Returns error or nil
-	return response.Error
+	if response.Error != nil {
+		return fmt.Errorf("[%d] %s %s", response.Error.Code, response.Error.Message, response.Error.Data)
+	}
+	return nil
 
 }

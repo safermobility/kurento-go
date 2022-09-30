@@ -27,8 +27,7 @@ func (elem *DispatcherOneToMany) getConstructorParams(from IMediaObject, options
 
 }
 
-// Sets the source port that will be connected to the sinks of every `HubPort` of
-// the dispatcher
+// Sets the source port that will be connected to the sinks of every `HubPort` of the dispatcher
 func (elem *DispatcherOneToMany) SetSource(source HubPort) error {
 	req := elem.getInvokeRequest()
 
@@ -36,17 +35,24 @@ func (elem *DispatcherOneToMany) SetSource(source HubPort) error {
 
 	setIfNotEmpty(params, "source", source)
 
-	req["params"] = map[string]interface{}{
+	reqparams := map[string]interface{}{
 		"operation":       "setSource",
 		"object":          elem.Id,
 		"operationParams": params,
 	}
+	if elem.connection.SessionId != "" {
+		reqparams["sessionId"] = elem.connection.SessionId
+	}
+	req["params"] = reqparams
 
 	// Call server and wait response
 	response := <-elem.connection.Request(req)
 
 	// Returns error or nil
-	return response.Error
+	if response.Error != nil {
+		return fmt.Errorf("[%d] %s %s", response.Error.Code, response.Error.Message, response.Error.Data)
+	}
+	return nil
 
 }
 
@@ -54,15 +60,22 @@ func (elem *DispatcherOneToMany) SetSource(source HubPort) error {
 func (elem *DispatcherOneToMany) RemoveSource() error {
 	req := elem.getInvokeRequest()
 
-	req["params"] = map[string]interface{}{
+	reqparams := map[string]interface{}{
 		"operation": "removeSource",
 		"object":    elem.Id,
 	}
+	if elem.connection.SessionId != "" {
+		reqparams["sessionId"] = elem.connection.SessionId
+	}
+	req["params"] = reqparams
 
 	// Call server and wait response
 	response := <-elem.connection.Request(req)
 
 	// Returns error or nil
-	return response.Error
+	if response.Error != nil {
+		return fmt.Errorf("[%d] %s %s", response.Error.Code, response.Error.Message, response.Error.Data)
+	}
+	return nil
 
 }

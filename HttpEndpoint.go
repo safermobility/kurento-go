@@ -2,42 +2,12 @@ package kurento
 
 import "fmt"
 
-type IHttpGetEndpoint interface {
-}
-
-// An "HttpGetEndpoint" contains SOURCE pads for AUDIO and VIDEO, delivering media
-// using HTML5 pseudo-streaming mechanism.
-// This type of endpoint provide unidirectional communications. Its `MediaSink`
-// is associated with the HTTP GET method
-type HttpGetEndpoint struct {
-	HttpEndpoint
-}
-
-// Return contructor params to be called by "Create".
-func (elem *HttpGetEndpoint) getConstructorParams(from IMediaObject, options map[string]interface{}) map[string]interface{} {
-
-	// Create basic constructor params
-	ret := map[string]interface{}{
-		"mediaPipeline":        fmt.Sprintf("%s", from),
-		"terminateOnEOS":       fmt.Sprintf("%s", from),
-		"mediaProfile":         fmt.Sprintf("%s", from),
-		"disconnectionTimeout": 2,
-	}
-
-	// then merge options
-	mergeOptions(ret, options)
-
-	return ret
-
-}
-
 type IHttpPostEndpoint interface {
 }
 
-// An `HttpPostEndpoint` contains SINK pads for AUDIO and VIDEO, which provide
-// access to an HTTP file upload function
-// This type of endpoint provide unidirectional communications. Its
-// `MediaSources <MediaSource>` are accessed through the `HTTP` POST method.
+// An `HttpPostEndpoint` contains SINK pads for AUDIO and VIDEO, which provide access to an HTTP file upload function
+//
+// This type of endpoint provide unidirectional communications. Its `MediaSources <MediaSource>` are accessed through the HTTP POST method.
 type HttpPostEndpoint struct {
 	HttpEndpoint
 }
@@ -49,7 +19,7 @@ func (elem *HttpPostEndpoint) getConstructorParams(from IMediaObject, options ma
 	ret := map[string]interface{}{
 		"mediaPipeline":        fmt.Sprintf("%s", from),
 		"disconnectionTimeout": 2,
-		"useEncodedMedia":      fmt.Sprintf("%s", from),
+		"useEncodedMedia":      false,
 	}
 
 	// then merge options
@@ -63,8 +33,7 @@ type IHttpEndpoint interface {
 	GetUrl() (string, error)
 }
 
-// Endpoint that enables Kurento to work as an HTTP server, allowing peer HTTP
-// clients to access media.
+// Endpoint that enables Kurento to work as an HTTP server, allowing peer HTTP clients to access media.
 type HttpEndpoint struct {
 	SessionEndpoint
 }
@@ -81,16 +50,28 @@ func (elem *HttpEndpoint) getConstructorParams(from IMediaObject, options map[st
 func (elem *HttpEndpoint) GetUrl() (string, error) {
 	req := elem.getInvokeRequest()
 
-	req["params"] = map[string]interface{}{
+	reqparams := map[string]interface{}{
 		"operation": "getUrl",
 		"object":    elem.Id,
 	}
+	if elem.connection.SessionId != "" {
+		reqparams["sessionId"] = elem.connection.SessionId
+	}
+	req["params"] = reqparams
 
 	// Call server and wait response
 	response := <-elem.connection.Request(req)
 
 	// // The url as a String
+	var err error
+	if response.Error != nil {
+		err = fmt.Errorf("[%d] %s %s", response.Error.Code, response.Error.Message, response.Error.Data)
+	}
 
-	return response.Result["value"], response.Error
+	if value, ok := response.Result["value"].(string); ok {
+		return value, err
+	}
+
+	return "", err
 
 }

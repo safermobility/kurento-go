@@ -26,8 +26,7 @@ func (elem *Dispatcher) getConstructorParams(from IMediaObject, options map[stri
 
 }
 
-// Connects each corresponding :rom:enum:`MediaType` of the given source port with
-// the sink port.
+// Connects each corresponding :rom:enum:`MediaType` of the given source port with the sink port.
 func (elem *Dispatcher) Connect(source HubPort, sink HubPort) error {
 	req := elem.getInvokeRequest()
 
@@ -36,16 +35,23 @@ func (elem *Dispatcher) Connect(source HubPort, sink HubPort) error {
 	setIfNotEmpty(params, "source", source)
 	setIfNotEmpty(params, "sink", sink)
 
-	req["params"] = map[string]interface{}{
+	reqparams := map[string]interface{}{
 		"operation":       "connect",
 		"object":          elem.Id,
 		"operationParams": params,
 	}
+	if elem.connection.SessionId != "" {
+		reqparams["sessionId"] = elem.connection.SessionId
+	}
+	req["params"] = reqparams
 
 	// Call server and wait response
 	response := <-elem.connection.Request(req)
 
 	// Returns error or nil
-	return response.Error
+	if response.Error != nil {
+		return fmt.Errorf("[%d] %s %s", response.Error.Code, response.Error.Message, response.Error.Data)
+	}
+	return nil
 
 }

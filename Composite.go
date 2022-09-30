@@ -5,9 +5,7 @@ import "fmt"
 type IComposite interface {
 }
 
-// A `Hub` that mixes the :rom:attr:`MediaType.AUDIO` stream of its connected
-// sources and constructs a grid with the :rom:attr:`MediaType.VIDEO`
-// streams of its connected sources into its sink
+// A `Hub` that mixes the :rom:attr:`MediaType.AUDIO` stream of its connected sources and constructs a grid with the :rom:attr:`MediaType.VIDEO` streams of its connected sources into its sink
 type Composite struct {
 	Hub
 }
