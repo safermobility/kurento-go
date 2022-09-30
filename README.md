@@ -17,7 +17,7 @@ With Go at server side, you only need to implement browser to application messag
 
 Your application will communicate streams information to KMS via Kurento Go Package and to clients.
 
-See doc at https://https://pkg.go.dev/github.com/SaferMobility/kurento-go
+See doc at https://pkg.go.dev/github.com/SaferMobility/kurento-go
 
 Example
 -------

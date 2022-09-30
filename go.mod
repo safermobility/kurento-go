@@ -1,4 +1,4 @@
-module github.com/safermobility/kurento-go
+module github.com/safermobility/kurento-go/v6
 
 go 1.18
 
