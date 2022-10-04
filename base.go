@@ -1,12 +1,11 @@
 package kurento
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"reflect"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 )
 
 var debug = true
@@ -73,7 +72,9 @@ func (elem *MediaObject) Create(m IMediaObject, options map[string]interface{}) 
 			elem.addChild(m)
 			//m.setParent(elem)
 			m.setId(value)
+			return nil
 		}
+		return errors.New("Unable to process response - no error, but not valid")
 	}
 
 	return fmt.Errorf("[%d] %s %s", res.Error.Code, res.Error.Message, res.Error.Data)
@@ -114,7 +115,7 @@ func (elem *MediaObject) Subscribe(event string, cb eventHandler) (string, error
 	}
 	req["params"] = reqparams
 	res := <-elem.connection.Request(req)
-	handlerId := res.Result["Value"].(string)
+	handlerId := res.Result["value"].(string)
 	if debug {
 		log.Println("Subscribe response handlerId ", handlerId)
 	}
@@ -208,16 +209,12 @@ func getMediaElementType(i interface{}) string {
 
 func mergeOptions(a, b map[string]interface{}) {
 	for key, val := range b {
-		a[key] = val
+		if val == nil {
+			delete(a, key)
+		} else {
+			a[key] = val
+		}
 	}
-}
-
-func lowerFirst(s string) string {
-	if s == "" {
-		return ""
-	}
-	r, n := utf8.DecodeRuneInString(s)
-	return string(unicode.ToLower(r)) + s[n:]
 }
 
 func setIfNotEmpty(param map[string]interface{}, name string, t interface{}) {

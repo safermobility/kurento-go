@@ -15,7 +15,7 @@ import (
 type Error struct {
 	Code    int64
 	Message string
-	Data    string
+	Data    interface{}
 }
 
 const ConnectionLost = -1
@@ -28,11 +28,25 @@ type Response struct {
 	Error   *Error
 }
 
+func (r *Response) unmarshal(raw json.RawMessage) bool {
+	if err := json.Unmarshal(raw, r); err != nil {
+		return false
+	}
+	return r.Id > 0 && (r.Result != nil || r.Error != nil)
+}
+
 type Event struct {
 	Jsonrpc string
 	Method  string
 	Params  map[string]interface{}
 	Error   *Error
+}
+
+func (e *Event) unmarshal(raw json.RawMessage) bool {
+	if err := json.Unmarshal(raw, e); err != nil {
+		return false
+	}
+	return e.Method == "onEvent"
 }
 
 type Connection struct {
@@ -95,8 +109,7 @@ func (c *Connection) Close() error {
 
 func (c *Connection) handleResponse() {
 	for { // run forever
-		r := Response{}
-		ev := Event{}
+		var incoming json.RawMessage
 		var message string
 		err := websocket.Message.Receive(c.ws, &message)
 		if err != nil {
@@ -110,14 +123,17 @@ func (c *Connection) handleResponse() {
 			log.Printf("RAW %s", message)
 		}
 
-		// Decode into both possible types. One should be valid
-		_ = json.Unmarshal([]byte(message), &r)
-		_ = json.Unmarshal([]byte(message), &ev)
+		err = json.Unmarshal([]byte(message), &incoming)
+		if err != nil {
+			log.Printf("Invalid JSON received on WebSocket: %s", err)
+			continue
+		}
 
-		isResponse := r.Id > 0 && r.Result != nil
-		isEvent := ev.Method == "onEvent"
+		r := Response{}
+		ev := Event{}
+		isResponse := r.unmarshal(incoming)
+		isEvent := ev.unmarshal(incoming)
 
-		//websocket.JSON.Receive(c.ws, &r)
 		if isResponse {
 			// If sessionId has been set/changed, save the new one
 			if sessionID, ok := r.Result["sessionId"].(string); ok && sessionID != "" && c.SessionId != sessionID {
@@ -130,15 +146,9 @@ func (c *Connection) handleResponse() {
 				log.Printf("Response: %v", r)
 			}
 			// if webscocket client exists, send response to the channel
-			c.clients.lock.RLock()
-			c.events.lock.RLock()
-			defer c.clients.lock.RUnlock()
-			defer c.events.lock.RUnlock()
 			if c.clients.clients[r.Id] != nil {
 				c.clients.clients[r.Id] <- r
 				// chanel is read, we can delete it
-				c.clients.lock.Lock()
-				defer c.clients.lock.Unlock()
 				close(c.clients.clients[r.Id])
 				delete(c.clients.clients, r.Id)
 			} else if debug {
@@ -172,9 +182,6 @@ func (c *Connection) handleResponse() {
 }
 
 func (c *Connection) Request(req map[string]interface{}) <-chan Response {
-	c.clients.lock.Lock()
-	defer c.clients.lock.Unlock()
-
 	if c.IsDead {
 		errchan := make(chan Response, 1)
 		errresp := Response{
@@ -225,9 +232,6 @@ func (c *Connection) Subscribe(event, objectId, handlerId string, handler eventH
 	var oh map[string]map[string]eventHandler
 	var ok bool
 
-	c.events.lock.Lock()
-	defer c.events.lock.Unlock()
-
 	if oh, ok = c.events.subscribers[event]; !ok {
 		c.events.subscribers[event] = make(map[string]map[string]eventHandler)
 		oh = c.events.subscribers[event]
@@ -246,9 +250,6 @@ func (c *Connection) Unsubscribe(event, objectId, handlerId string) {
 	var oh map[string]map[string]eventHandler
 	var he map[string]eventHandler
 	var ok bool
-
-	c.events.lock.Lock()
-	defer c.events.lock.Unlock()
 
 	if oh, ok = c.events.subscribers[event]; !ok {
 		return // not found
