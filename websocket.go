@@ -119,6 +119,7 @@ func (c *Connection) handleResponse() {
 			log.Printf("Error receiving on websocket %s", err)
 			c.IsDead = true
 			c.Dead <- true
+			close(c.eChan)
 			break
 		}
 
