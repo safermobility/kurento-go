@@ -57,6 +57,7 @@ type Connection struct {
 	ws        *websocket.Conn
 	SessionId string
 	events    threadsafeSubscriberMap
+	eChan     chan Event
 	Dead      chan bool
 	IsDead    bool
 }
@@ -77,6 +78,7 @@ func NewConnection(host string) (*Connection, error) {
 	c.events = threadsafeSubscriberMap{
 		subscribers: make(map[string]map[string]map[string]eventHandler),
 	}
+	c.eChan = make(chan Event, 1)
 	c.clients = threadsafeClientMap{
 		clients: make(map[float64]chan Response),
 	}
@@ -93,6 +95,7 @@ func NewConnection(host string) (*Connection, error) {
 		return nil, fmt.Errorf("kurento: error dialing: %w", err)
 	}
 	c.host = host
+	go c.handleEvents()
 	go c.handleResponse()
 	return c, nil
 }
@@ -156,28 +159,33 @@ func (c *Connection) handleResponse() {
 				log.Println(r)
 			}
 		} else if isEvent {
-
-			val := ev.Params["value"].(map[string]interface{})
-			if debug {
-				log.Printf("Received event value %v", val)
-			}
-
-			t := val["type"].(string)
-			objectId := val["object"].(string)
-
-			data := val["data"].(map[string]interface{})
-
-			if handlers, ok := c.events.subscribers[t]; ok {
-				if objHandlers, ok := handlers[objectId]; ok {
-					for _, handler := range objHandlers {
-						handler(data)
-					}
-				}
-			}
+			c.eChan <- ev
 		} else {
 			log.Println("Unsupported message from KMS: ", message)
 		}
 
+	}
+}
+
+func (c *Connection) handleEvents() {
+	for ev := range c.eChan { // run until the channel is closed
+		val := ev.Params["value"].(map[string]interface{})
+		if debug {
+			log.Printf("Received event value %v", val)
+		}
+
+		t := val["type"].(string)
+		objectId := val["object"].(string)
+
+		data := val["data"].(map[string]interface{})
+
+		if handlers, ok := c.events.subscribers[t]; ok {
+			if objHandlers, ok := handlers[objectId]; ok {
+				for _, handler := range objHandlers {
+					handler(data)
+				}
+			}
+		}
 	}
 }
 
