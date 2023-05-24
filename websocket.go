@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/websocket"
@@ -23,7 +24,7 @@ const ConnectionLost = -1
 // Response represents server response
 type Response struct {
 	Jsonrpc string
-	Id      float64
+	Id      int64
 	Result  map[string]interface{}
 	Error   *Error
 }
@@ -50,7 +51,7 @@ func (e *Event) unmarshal(raw json.RawMessage) bool {
 }
 
 type Connection struct {
-	clientId  float64
+	clientId  *atomic.Int64
 	eventId   float64
 	clients   threadsafeClientMap
 	host      string
@@ -63,7 +64,7 @@ type Connection struct {
 }
 
 type threadsafeClientMap struct {
-	clients map[float64]chan Response
+	clients map[int64]chan Response
 	lock    sync.RWMutex
 }
 
@@ -75,12 +76,13 @@ type threadsafeSubscriberMap struct {
 func NewConnection(host string) (*Connection, error) {
 	c := new(Connection)
 
+	c.clientId = &atomic.Int64{}
 	c.events = threadsafeSubscriberMap{
 		subscribers: make(map[string]map[string]map[string]eventHandler),
 	}
 	c.eChan = make(chan Event, 1)
 	c.clients = threadsafeClientMap{
-		clients: make(map[float64]chan Response),
+		clients: make(map[int64]chan Response),
 	}
 	c.Dead = make(chan bool, 1)
 
@@ -149,7 +151,7 @@ func (c *Connection) handleResponse() {
 			if debug {
 				log.Printf("Response: %v", r)
 			}
-			// if webscocket client exists, send response to the channel
+			// if websocket client exists, send response to the channel
 			if c.clients.clients[r.Id] != nil {
 				c.clients.clients[r.Id] <- r
 				// chanel is read, we can delete it
@@ -194,7 +196,7 @@ func (c *Connection) Request(req map[string]interface{}) <-chan Response {
 	if c.IsDead {
 		errchan := make(chan Response, 1)
 		errresp := Response{
-			Id: req["id"].(float64),
+			Id: req["id"].(int64),
 			Error: &Error{
 				Code:    ConnectionLost,
 				Message: "No connection to Kurento server",
@@ -204,12 +206,12 @@ func (c *Connection) Request(req map[string]interface{}) <-chan Response {
 		return errchan
 	}
 
-	c.clientId++
-	req["id"] = c.clientId
+	reqId := c.clientId.Add(1)
+	req["id"] = reqId
 	if c.SessionId != "" {
 		req["sessionId"] = c.SessionId
 	}
-	c.clients.clients[c.clientId] = make(chan Response)
+	c.clients.clients[reqId] = make(chan Response)
 	if debug {
 		j, _ := json.MarshalIndent(req, "", "    ")
 		log.Println("json", string(j))
@@ -220,11 +222,11 @@ func (c *Connection) Request(req map[string]interface{}) <-chan Response {
 		c.Dead <- true
 		c.IsDead = true
 
-		delete(c.clients.clients, c.clientId)
+		delete(c.clients.clients, reqId)
 
 		errchan := make(chan Response, 1)
 		errresp := Response{
-			Id: req["id"].(float64),
+			Id: req["id"].(int64),
 			Error: &Error{
 				Code:    ConnectionLost,
 				Message: "No connection to Kurento server",
@@ -234,7 +236,7 @@ func (c *Connection) Request(req map[string]interface{}) <-chan Response {
 		errchan <- errresp
 		return errchan
 	}
-	return c.clients.clients[c.clientId]
+	return c.clients.clients[reqId]
 }
 
 func (c *Connection) Subscribe(event, objectId, handlerId string, handler eventHandler) {
