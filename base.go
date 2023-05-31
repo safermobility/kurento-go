@@ -8,11 +8,21 @@ import (
 	"strings"
 )
 
-var debug = true
+type LogLevel int
+
+const (
+	LogLevelNone  LogLevel = 0
+	LogLevelInfo  LogLevel = 1
+	LogLevelDebug LogLevel = 2
+	LogLevelTrace LogLevel = 3
+	LogLevelSilly LogLevel = 4
+)
+
+var logLevel LogLevel = 0
 
 // Debug activate debug information.
-func Debug(state bool) {
-	debug = state
+func Debug(level LogLevel) {
+	logLevel = level
 }
 
 // IMediaElement implements some basic methods as getConstructorParams or Create().
@@ -55,16 +65,16 @@ func (elem *MediaObject) Create(m IMediaObject, options map[string]interface{}) 
 	}
 	req["params"] = reqparams
 
-	if debug {
-		log.Printf("request to be sent: %+v\n", req)
+	if logLevel > 0 {
+		log.Printf("CREATE sending request: %+v\n", req)
 	}
 
 	m.setConnection(elem.connection)
 
 	res := <-elem.connection.Request(req)
 
-	if debug {
-		log.Println("Oncreate response: ", res)
+	if logLevel > 0 {
+		log.Printf("CREATE received response: %+v\n", res)
 	}
 
 	if res.Error == nil {
@@ -72,6 +82,9 @@ func (elem *MediaObject) Create(m IMediaObject, options map[string]interface{}) 
 			elem.addChild(m)
 			//m.setParent(elem)
 			m.setId(value)
+			if logLevel >= LogLevelTrace {
+				log.Printf("set element ID for created element: %s\n", value)
+			}
 			return nil
 		}
 		return errors.New("Unable to process response - no error, but not valid")
@@ -90,9 +103,13 @@ func (elem *MediaObject) Release() error {
 		reqparams["sessionId"] = elem.connection.SessionId
 	}
 	req["params"] = reqparams
+
+	if logLevel > 0 {
+		log.Printf("RELEASE sending request: %+v\n", req)
+	}
 	res := <-elem.connection.Request(req)
-	if debug {
-		log.Println("Release response ", res)
+	if logLevel > 0 {
+		log.Println("RELEASE received response ", res)
 	}
 
 	if res.Error != nil {
@@ -114,10 +131,13 @@ func (elem *MediaObject) Subscribe(event string, cb eventHandler) (string, error
 		reqparams["sessionId"] = elem.connection.SessionId
 	}
 	req["params"] = reqparams
+	if logLevel > 0 {
+		log.Printf("SUBSCRIBE sending request: %+v\n", req)
+	}
 	res := <-elem.connection.Request(req)
 	handlerId := res.Result["value"].(string)
-	if debug {
-		log.Println("Subscribe response handlerId ", handlerId)
+	if logLevel > 0 {
+		log.Println("SUBSCRIBE response handlerId ", handlerId)
 	}
 
 	// tell the connection about this registered event for this mediaId event combo

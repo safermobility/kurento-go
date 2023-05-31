@@ -114,6 +114,9 @@ func (c *Connection) Close() error {
 
 func (c *Connection) handleResponse() {
 	for { // run forever
+		if logLevel >= LogLevelSilly {
+			log.Println("KURENTO WS: starting receive loop")
+		}
 		var incoming json.RawMessage
 		var message string
 		err := websocket.Message.Receive(c.ws, &message)
@@ -124,8 +127,11 @@ func (c *Connection) handleResponse() {
 			close(c.eChan)
 			break
 		}
+		if logLevel >= LogLevelSilly {
+			log.Println("KURENTO WS: received message")
+		}
 
-		if debug {
+		if logLevel > LogLevelDebug {
 			log.Printf("RAW %s", message)
 		}
 
@@ -143,26 +149,38 @@ func (c *Connection) handleResponse() {
 		if isResponse {
 			// If sessionId has been set/changed, save the new one
 			if sessionID, ok := r.Result["sessionId"].(string); ok && sessionID != "" && c.SessionId != sessionID {
-				if debug {
+				if logLevel > 0 {
 					log.Println("sessionId returned ", r.Result["sessionId"])
 				}
 				c.SessionId = sessionID
 			}
-			if debug {
+			if logLevel > 0 {
 				log.Printf("Response: %v", r)
 			}
 			// if websocket client exists, send response to the channel
 			if c.clients.clients[r.Id] != nil {
+				if logLevel >= LogLevelSilly {
+					log.Printf("KURENTO WS: sending response to client: %d\n", r.Id)
+				}
 				c.clients.clients[r.Id] <- r
 				// chanel is read, we can delete it
 				close(c.clients.clients[r.Id])
 				delete(c.clients.clients, r.Id)
-			} else if debug {
+				if logLevel >= LogLevelSilly {
+					log.Printf("KURENTO WS: finished handling response in client: %d\n", r.Id)
+				}
+			} else if logLevel > 0 {
 				log.Println("Dropped message because there is no client ", r.Id)
 				log.Println(r)
 			}
 		} else if isEvent {
+			if logLevel >= LogLevelSilly {
+				log.Printf("KURENTO WS: sending event to client: %s\n", ev.Method)
+			}
 			c.eChan <- ev
+			if logLevel >= LogLevelSilly {
+				log.Printf("KURENTO WS: finished handling event in client: %s\n", ev.Method)
+			}
 		} else {
 			log.Println("Unsupported message from KMS: ", message)
 		}
@@ -173,7 +191,7 @@ func (c *Connection) handleResponse() {
 func (c *Connection) handleEvents() {
 	for ev := range c.eChan { // run until the channel is closed
 		val := ev.Params["value"].(map[string]interface{})
-		if debug {
+		if logLevel > 0 {
 			log.Printf("Received event value %v", val)
 		}
 
@@ -183,10 +201,28 @@ func (c *Connection) handleEvents() {
 		data := val["data"].(map[string]interface{})
 
 		if handlers, ok := c.events.subscribers[t]; ok {
+			if logLevel >= LogLevelSilly {
+				log.Printf("KURENTO WS: start event loop 0: %s\n", t)
+			}
 			if objHandlers, ok := handlers[objectId]; ok {
-				for _, handler := range objHandlers {
-					handler(data)
+				if logLevel >= LogLevelSilly {
+					log.Printf("KURENTO WS: start event loop 1: %s - %s\n", t, objectId)
 				}
+				for name, handler := range objHandlers {
+					if logLevel >= LogLevelSilly {
+						log.Printf("KURENTO WS: start event loop 2: %s - %s - %s\n", t, objectId, name)
+					}
+					handler(data)
+					if logLevel >= LogLevelSilly {
+						log.Printf("KURENTO WS:   end event loop 2: %s - %s - %s\n", t, objectId, name)
+					}
+				}
+				if logLevel >= LogLevelSilly {
+					log.Printf("KURENTO WS:   end event loop 1: %s - %s\n", t, objectId)
+				}
+			}
+			if logLevel >= LogLevelSilly {
+				log.Printf("KURENTO WS:   end event loop 0: %s\n", t)
 			}
 		}
 	}
@@ -212,7 +248,7 @@ func (c *Connection) Request(req map[string]interface{}) <-chan Response {
 		req["sessionId"] = c.SessionId
 	}
 	c.clients.clients[reqId] = make(chan Response)
-	if debug {
+	if logLevel > 0 {
 		j, _ := json.MarshalIndent(req, "", "    ")
 		log.Println("json", string(j))
 	}
