@@ -232,11 +232,15 @@ func (c *Connection) Request(req map[string]interface{}) <-chan Response {
 	if c.IsDead {
 		errchan := make(chan Response, 1)
 		errresp := Response{
-			Id: req["id"].(int64),
 			Error: &Error{
 				Code:    ConnectionLost,
 				Message: "No connection to Kurento server",
 			},
+		}
+		if idInterface, ok := req["id"]; ok {
+			if id, ok := idInterface.(int64); ok {
+				errresp.Id = id
+			}
 		}
 		errchan <- errresp
 		return errchan
